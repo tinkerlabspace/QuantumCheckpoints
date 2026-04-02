@@ -44,6 +44,7 @@ public class ConfigManager {
     /**
      * Loads or reloads configuration from file.
      * Creates defaults if the file doesn't exist.
+     * Logs warnings and corrects invalid values.
      */
     public void loadConfig() {
         plugin.saveDefaultConfig();
@@ -55,15 +56,23 @@ public class ConfigManager {
         this.checkpointsEnabled = config.getBoolean("checkpoints-enabled", true);
         this.checkpointLimit = config.getInt("checkpoint-limit", 3);
 
-        // Cost configuration
+        // Cost configuration with validation
         String costMaterial = config.getString("cost.material", "");
         int costAmount = config.getInt("cost.amount", 0);
+
         if (!costMaterial.isEmpty() && costAmount > 0) {
             Material material = Material.matchMaterial(costMaterial);
             if (material != null) {
                 this.checkpointCost = new ItemStack(material, costAmount);
             } else {
+                // Invalid material - log warning and reset to free
+                plugin.getLogger().warning("Invalid material '" + costMaterial + "' in config. Setting cost to free.");
                 this.checkpointCost = null;
+
+                // Update config to reflect actual state
+                config.set("cost.material", "");
+                config.set("cost.amount", 0);
+                plugin.saveConfig();
             }
         } else {
             this.checkpointCost = null;
@@ -72,15 +81,40 @@ public class ConfigManager {
         // Restoration settings
         this.penaltyEnabled = config.getBoolean("penalty-enabled", true);
 
-        // Proximity settings
+        // Proximity settings with validation
         this.proximityRadius = config.getDouble("proximity-radius", 3.0);
+        if (this.proximityRadius < 1.0) {
+            plugin.getLogger().warning("proximity-radius must be at least 1.0. Correcting to 1.0.");
+            this.proximityRadius = 1.0;
+            config.set("proximity-radius", 1.0);
+            plugin.saveConfig();
+        }
 
-        // Visual settings
+        // Visual settings with validation
         this.beamHeight = config.getDouble("beam-height", 5.0);
-        this.particleViewDistance = config.getDouble("particle-view-distance", 100.0);
+        if (this.beamHeight < 1.0) {
+            plugin.getLogger().warning("beam-height must be at least 1.0. Correcting to 1.0.");
+            this.beamHeight = 1.0;
+            config.set("beam-height", 1.0);
+            plugin.saveConfig();
+        }
 
-        // Confirmation settings
+        this.particleViewDistance = config.getDouble("particle-view-distance", 100.0);
+        if (this.particleViewDistance < 10.0) {
+            plugin.getLogger().warning("particle-view-distance must be at least 10.0. Correcting to 10.0.");
+            this.particleViewDistance = 10.0;
+            config.set("particle-view-distance", 10.0);
+            plugin.saveConfig();
+        }
+
+        // Confirmation settings with validation
         this.confirmationTimeout = config.getLong("confirmation-timeout", 30);
+        if (this.confirmationTimeout < 5) {
+            plugin.getLogger().warning("confirmation-timeout must be at least 5. Correcting to 5.");
+            this.confirmationTimeout = 5;
+            config.set("confirmation-timeout", 5);
+            plugin.saveConfig();
+        }
     }
 
     /**

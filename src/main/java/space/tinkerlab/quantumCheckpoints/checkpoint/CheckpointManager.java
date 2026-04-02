@@ -58,7 +58,8 @@ public class CheckpointManager {
 
     /**
      * Force-creates a checkpoint after the player confirmed overriding their
-     * own nearby checkpoint.
+     * own nearby checkpoint. Validates cost BEFORE removing the conflicting
+     * checkpoint to prevent data loss on insufficient resources.
      *
      * @param player      the player creating the checkpoint
      * @param location    the desired location
@@ -70,8 +71,24 @@ public class CheckpointManager {
             return CheckpointResult.failure("Checkpoints are currently disabled.");
         }
 
+        // Check cost BEFORE removing the conflicting checkpoint
+        // This prevents losing the old checkpoint when the player can't afford a new one
+        if (!handleCost(player)) {
+            return CheckpointResult.failure("Insufficient resources. Cost: " +
+                    plugin.getConfigManager().getCostDescription());
+        }
+
+        // Cost paid successfully — now safe to remove the conflicting checkpoint
         removeCheckpoint(conflicting);
-        return executeCreate(player, location);
+
+        enforceCheckpointLimit(player);
+
+        PlayerState state = new PlayerState(player);
+        Checkpoint checkpoint = new Checkpoint(player.getUniqueId(), player.getName(), location, state);
+        addCheckpoint(checkpoint);
+        plugin.getBeamManager().createBeam(checkpoint);
+
+        return CheckpointResult.success(checkpoint);
     }
 
     /**
