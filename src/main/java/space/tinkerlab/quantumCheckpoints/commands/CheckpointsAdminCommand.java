@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 /**
  * Thin dispatcher for admin checkpoint commands (/checkpoints).
  * Supports both player and console execution.
- * Delegates all logic to registered {@link SubCommand} handlers.
  */
 public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
 
@@ -34,13 +33,29 @@ public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
     public CheckpointsAdminCommand(QuantumCheckpoints plugin) {
         this.registry = new CommandRegistry();
 
+        // Core settings
         registry.register(new CostCommand(plugin));
         registry.register(new LimitCommand(plugin));
+        registry.register(new PenaltyCommand(plugin));
+
+        // Enable/Disable
         registry.register(new DisableCommand(plugin));
         registry.register(new EnableCommand(plugin));
         registry.register(new ClearCommand(plugin));
-        registry.register(new PenaltyCommand(plugin));
+
+        // Proximity
+        registry.register(new ProximityCommand(plugin));
+
+        // Visual
+        registry.register(new BeamHeightCommand(plugin));
+        registry.register(new ViewDistanceCommand(plugin));
+
+        // Confirmation
+        registry.register(new TimeoutCommand(plugin));
+
+        // Utility
         registry.register(new StatusCommand(plugin));
+        registry.register(new ReloadCommand(plugin));
         registry.register(new ConfirmCommand(plugin));
         registry.register(new CancelCommand(plugin));
     }
@@ -78,14 +93,24 @@ public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender) {
-        MessageUtil.info(sender, "§6QuantumCheckpoints Admin Commands:");
-        MessageUtil.info(sender, " §e/checkpoints cost <item> <amount> §7- Set cost");
-        MessageUtil.info(sender, " §e/checkpoints limit <number> §7- Set limit");
-        MessageUtil.info(sender, " §e/checkpoints disable [true/false] §7- Disable");
-        MessageUtil.info(sender, " §e/checkpoints enable [true/false] §7- Enable");
-        MessageUtil.info(sender, " §e/checkpoints clear §7- Clear all");
-        MessageUtil.info(sender, " §e/checkpoints penalty <true/false> §7- Toggle penalty");
-        MessageUtil.info(sender, " §e/checkpoints status §7- View settings");
+        MessageUtil.info(sender, "§6═══ QuantumCheckpoints Admin ═══");
+        MessageUtil.info(sender, "§e Core:");
+        MessageUtil.info(sender, "  §f/checkpoints cost <item> <amount> §7- Set cost");
+        MessageUtil.info(sender, "  §f/checkpoints limit <number> §7- Set limit");
+        MessageUtil.info(sender, "  §f/checkpoints penalty <true/false> §7- Toggle penalty");
+        MessageUtil.info(sender, "§e Control:");
+        MessageUtil.info(sender, "  §f/checkpoints disable [true/false] §7- Disable");
+        MessageUtil.info(sender, "  §f/checkpoints enable [true/false] §7- Enable");
+        MessageUtil.info(sender, "  §f/checkpoints clear §7- Clear all");
+        MessageUtil.info(sender, "§e Proximity:");
+        MessageUtil.info(sender, "  §f/checkpoints proximity <radius> §7- Set radius");
+        MessageUtil.info(sender, "§e Visual:");
+        MessageUtil.info(sender, "  §f/checkpoints beamheight <height> §7- Set height");
+        MessageUtil.info(sender, "  §f/checkpoints viewdistance <dist> §7- Set view dist");
+        MessageUtil.info(sender, "§e Other:");
+        MessageUtil.info(sender, "  §f/checkpoints timeout <seconds> §7- Set timeout");
+        MessageUtil.info(sender, "  §f/checkpoints status §7- View settings");
+        MessageUtil.info(sender, "  §f/checkpoints reload §7- Reload config");
     }
 
     @Override

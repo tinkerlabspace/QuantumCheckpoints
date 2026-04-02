@@ -1,17 +1,51 @@
-# src/main/resources/config.yml
 # QuantumCheckpoints Configuration
+# All values can be changed at runtime using /checkpoints commands
+# or by editing this file and using /checkpoints reload
+
+# =============================================================================
+# CORE SETTINGS
+# =============================================================================
 
 # Whether checkpoints are enabled on the server
 checkpoints-enabled: true
 
-# Whether the restoration penalty (random item loss) is enabled
-penalty-enabled: true
-
-# Maximum number of checkpoints a player can have
+# Maximum number of checkpoints a player can have at once
 checkpoint-limit: 3
 
-# Cost to create a checkpoint
-# Set material to empty string for free checkpoints
+# Cost to create a checkpoint (leave material empty for free)
 cost:
   material: ""
   amount: 0
+
+# =============================================================================
+# RESTORATION SETTINGS
+# =============================================================================
+
+# Whether the restoration penalty (random item loss) is enabled
+penalty-enabled: true
+
+# =============================================================================
+# PROXIMITY SETTINGS
+# =============================================================================
+
+# Radius (in blocks) within which a player is considered "at" a checkpoint
+# Also prevents the same player from creating multiple checkpoints within this radius
+proximity-radius: 3.0
+
+# =============================================================================
+# VISUAL SETTINGS
+# =============================================================================
+
+# Height of the checkpoint beam (in blocks)
+beam-height: 5.0
+
+# Maximum distance (in blocks) at which particles are rendered for the owner
+# Lower values improve performance on servers with many checkpoints
+particle-view-distance: 100
+
+# =============================================================================
+# CONFIRMATION SETTINGS
+# =============================================================================
+
+# Seconds before a confirmation prompt expires
+confirmation-timeout: 30
