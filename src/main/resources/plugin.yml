@@ -1,0 +1,28 @@
+# src/main/resources/plugin.yml
+name: QuantumCheckpoints
+version: '${version}'
+main: space.tinkerlab.quantumCheckpoints.QuantumCheckpoints
+api-version: '1.21'
+description: A checkpoint system allowing players to save and restore their state
+
+authors:
+  - TinkerLab
+
+commands:
+  checkpoint:
+    description: Player checkpoint commands
+    usage: /<command> [here|delete|list|restore|<x> <z>]
+    aliases:
+      - cp
+  checkpoints:
+    description: Admin checkpoint management commands
+    usage: /<command> <cost|limit|disable|enable|clear|penalty|status>
+    permission: quantumcheckpoints.admin
+
+permissions:
+  quantumcheckpoints.admin:
+    description: Allows access to admin checkpoint commands
+    default: op
+  quantumcheckpoints.use:
+    description: Allows players to use basic checkpoint commands
+    default: true

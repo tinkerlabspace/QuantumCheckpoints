@@ -1,0 +1,17 @@
+# src/main/resources/config.yml
+# QuantumCheckpoints Configuration
+
+# Whether checkpoints are enabled on the server
+checkpoints-enabled: true
+
+# Whether the restoration penalty (random item loss) is enabled
+penalty-enabled: true
+
+# Maximum number of checkpoints a player can have
+checkpoint-limit: 3
+
+# Cost to create a checkpoint
+# Set material to empty string for free checkpoints
+cost:
+  material: ""
+  amount: 0
