@@ -1,7 +1,7 @@
-// src/main/java/space/tinkerlab/quantumCheckpoints/QuantumCheckpoints.java
 package space.tinkerlab.quantumCheckpoints;
 
 import org.bukkit.plugin.java.JavaPlugin;
+import space.tinkerlab.quantumCheckpoints.auto.AutoCheckpointManager;
 import space.tinkerlab.quantumCheckpoints.checkpoint.CheckpointManager;
 import space.tinkerlab.quantumCheckpoints.commands.CheckpointCommand;
 import space.tinkerlab.quantumCheckpoints.commands.CheckpointsAdminCommand;
@@ -10,10 +10,9 @@ import space.tinkerlab.quantumCheckpoints.config.ConfigManager;
 import space.tinkerlab.quantumCheckpoints.gui.ConfirmationGUI;
 import space.tinkerlab.quantumCheckpoints.listeners.CheckpointInteractionListener;
 import space.tinkerlab.quantumCheckpoints.listeners.GUIListener;
+import space.tinkerlab.quantumCheckpoints.listeners.PlayerJoinListener;
 import space.tinkerlab.quantumCheckpoints.storage.DataManager;
 import space.tinkerlab.quantumCheckpoints.visual.BeamManager;
-import space.tinkerlab.quantumCheckpoints.listeners.PlayerJoinListener;
-
 
 import java.util.Objects;
 
@@ -31,37 +30,35 @@ public final class QuantumCheckpoints extends JavaPlugin {
     private BeamManager beamManager;
     private ConfirmationManager confirmationManager;
     private ConfirmationGUI confirmationGUI;
+    private AutoCheckpointManager autoCheckpointManager;
 
     @Override
     public void onEnable() {
         instance = this;
 
-        // Initialize managers in dependency order
         initializeManagers();
-
-        // Register commands
         registerCommands();
-
-        // Register listeners
         registerListeners();
 
-        // Load data
         dataManager.loadAll();
-
-        // Restore beams for existing checkpoints
         beamManager.restoreAllBeams();
+
+        // Start auto-checkpoint system
+        autoCheckpointManager.start();
 
         getLogger().info("QuantumCheckpoints has been enabled!");
     }
 
     @Override
     public void onDisable() {
-        // Save all data
+        if (autoCheckpointManager != null) {
+            autoCheckpointManager.stop();
+        }
+
         if (dataManager != null) {
             dataManager.saveAll();
         }
 
-        // Remove all visual beams
         if (beamManager != null) {
             beamManager.removeAllBeams();
         }
@@ -79,6 +76,7 @@ public final class QuantumCheckpoints extends JavaPlugin {
         beamManager = new BeamManager(this);
         confirmationManager = new ConfirmationManager(this);
         confirmationGUI = new ConfirmationGUI(this);
+        autoCheckpointManager = new AutoCheckpointManager(this);
     }
 
     /**
@@ -105,11 +103,6 @@ public final class QuantumCheckpoints extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
     }
 
-    /**
-     * Gets the singleton instance of the plugin.
-     *
-     * @return the plugin instance
-     */
     public static QuantumCheckpoints getInstance() {
         return instance;
     }
@@ -136,5 +129,9 @@ public final class QuantumCheckpoints extends JavaPlugin {
 
     public ConfirmationGUI getConfirmationGUI() {
         return confirmationGUI;
+    }
+
+    public AutoCheckpointManager getAutoCheckpointManager() {
+        return autoCheckpointManager;
     }
 }

@@ -21,6 +21,11 @@ public class ConfigManager {
     // Restoration settings
     private boolean penaltyEnabled;
 
+    // Auto checkpoint settings
+    private boolean autoCheckpointEnabled;
+    private int autoCheckpointInterval;
+    private int autoCheckpointMinInterval;
+
     // Proximity settings
     private double proximityRadius;
 
@@ -65,11 +70,8 @@ public class ConfigManager {
             if (material != null) {
                 this.checkpointCost = new ItemStack(material, costAmount);
             } else {
-                // Invalid material - log warning and reset to free
                 plugin.getLogger().warning("Invalid material '" + costMaterial + "' in config. Setting cost to free.");
                 this.checkpointCost = null;
-
-                // Update config to reflect actual state
                 config.set("cost.material", "");
                 config.set("cost.amount", 0);
                 plugin.saveConfig();
@@ -80,6 +82,26 @@ public class ConfigManager {
 
         // Restoration settings
         this.penaltyEnabled = config.getBoolean("penalty-enabled", true);
+
+        // Auto checkpoint settings with validation
+        this.autoCheckpointEnabled = config.getBoolean("auto-checkpoint-enabled", true);
+
+        this.autoCheckpointMinInterval = config.getInt("auto-checkpoint-min-interval", 1);
+        if (this.autoCheckpointMinInterval < 1) {
+            plugin.getLogger().warning("auto-checkpoint-min-interval must be at least 1. Correcting to 1.");
+            this.autoCheckpointMinInterval = 1;
+            config.set("auto-checkpoint-min-interval", 1);
+            plugin.saveConfig();
+        }
+
+        this.autoCheckpointInterval = config.getInt("auto-checkpoint-interval", 10);
+        if (this.autoCheckpointInterval < this.autoCheckpointMinInterval) {
+            plugin.getLogger().warning("auto-checkpoint-interval must be at least " +
+                    this.autoCheckpointMinInterval + ". Correcting.");
+            this.autoCheckpointInterval = this.autoCheckpointMinInterval;
+            config.set("auto-checkpoint-interval", this.autoCheckpointInterval);
+            plugin.saveConfig();
+        }
 
         // Proximity settings with validation
         this.proximityRadius = config.getDouble("proximity-radius", 3.0);
@@ -123,11 +145,9 @@ public class ConfigManager {
     public void saveConfig() {
         FileConfiguration config = plugin.getConfig();
 
-        // Core settings
         config.set("checkpoints-enabled", checkpointsEnabled);
         config.set("checkpoint-limit", checkpointLimit);
 
-        // Cost
         if (checkpointCost != null) {
             config.set("cost.material", checkpointCost.getType().name());
             config.set("cost.amount", checkpointCost.getAmount());
@@ -136,17 +156,17 @@ public class ConfigManager {
             config.set("cost.amount", 0);
         }
 
-        // Restoration settings
         config.set("penalty-enabled", penaltyEnabled);
 
-        // Proximity settings
+        config.set("auto-checkpoint-enabled", autoCheckpointEnabled);
+        config.set("auto-checkpoint-interval", autoCheckpointInterval);
+        config.set("auto-checkpoint-min-interval", autoCheckpointMinInterval);
+
         config.set("proximity-radius", proximityRadius);
 
-        // Visual settings
         config.set("beam-height", beamHeight);
         config.set("particle-view-distance", particleViewDistance);
 
-        // Confirmation settings
         config.set("confirmation-timeout", confirmationTimeout);
 
         plugin.saveConfig();
@@ -154,7 +174,6 @@ public class ConfigManager {
 
     /**
      * Reloads configuration from disk without saving current values.
-     * Useful when admin has manually edited config.yml.
      */
     public void reload() {
         loadConfig();
@@ -191,11 +210,6 @@ public class ConfigManager {
         saveConfig();
     }
 
-    /**
-     * Gets a formatted string describing the current cost.
-     *
-     * @return the cost description
-     */
     public String getCostDescription() {
         if (checkpointCost == null) {
             return "Free";
@@ -217,6 +231,52 @@ public class ConfigManager {
     }
 
     // ==========================================================================
+    // AUTO CHECKPOINT SETTINGS
+    // ==========================================================================
+
+    public boolean isAutoCheckpointEnabled() {
+        return autoCheckpointEnabled;
+    }
+
+    public void setAutoCheckpointEnabled(boolean enabled) {
+        this.autoCheckpointEnabled = enabled;
+        saveConfig();
+    }
+
+    public int getAutoCheckpointInterval() {
+        return autoCheckpointInterval;
+    }
+
+    /**
+     * Sets the default auto-checkpoint interval.
+     * Enforces the minimum interval.
+     *
+     * @param minutes the interval in minutes
+     */
+    public void setAutoCheckpointInterval(int minutes) {
+        this.autoCheckpointInterval = Math.max(autoCheckpointMinInterval, minutes);
+        saveConfig();
+    }
+
+    public int getAutoCheckpointMinInterval() {
+        return autoCheckpointMinInterval;
+    }
+
+    /**
+     * Sets the minimum auto-checkpoint interval players can use.
+     * Also adjusts the default interval up if it's now below the new minimum.
+     *
+     * @param minutes the minimum interval in minutes
+     */
+    public void setAutoCheckpointMinInterval(int minutes) {
+        this.autoCheckpointMinInterval = Math.max(1, minutes);
+        if (this.autoCheckpointInterval < this.autoCheckpointMinInterval) {
+            this.autoCheckpointInterval = this.autoCheckpointMinInterval;
+        }
+        saveConfig();
+    }
+
+    // ==========================================================================
     // PROXIMITY SETTINGS
     // ==========================================================================
 
@@ -224,11 +284,6 @@ public class ConfigManager {
         return proximityRadius;
     }
 
-    /**
-     * Sets the proximity radius. Minimum value is 1.0.
-     *
-     * @param radius the new radius in blocks
-     */
     public void setProximityRadius(double radius) {
         this.proximityRadius = Math.max(1.0, radius);
         saveConfig();
@@ -242,12 +297,6 @@ public class ConfigManager {
         return beamHeight;
     }
 
-    /**
-     * Sets the beam height. Minimum value is 1.0.
-     * Note: Existing beams will need to be recreated to reflect changes.
-     *
-     * @param height the new height in blocks
-     */
     public void setBeamHeight(double height) {
         this.beamHeight = Math.max(1.0, height);
         saveConfig();
@@ -257,11 +306,6 @@ public class ConfigManager {
         return particleViewDistance;
     }
 
-    /**
-     * Sets the particle view distance. Minimum value is 10.0.
-     *
-     * @param distance the new distance in blocks
-     */
     public void setParticleViewDistance(double distance) {
         this.particleViewDistance = Math.max(10.0, distance);
         saveConfig();
@@ -275,11 +319,6 @@ public class ConfigManager {
         return confirmationTimeout;
     }
 
-    /**
-     * Sets the confirmation timeout. Minimum value is 5 seconds.
-     *
-     * @param seconds the timeout in seconds
-     */
     public void setConfirmationTimeout(long seconds) {
         this.confirmationTimeout = Math.max(5, seconds);
         saveConfig();
