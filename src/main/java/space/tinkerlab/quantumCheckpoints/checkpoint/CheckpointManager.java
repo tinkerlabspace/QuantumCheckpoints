@@ -1,10 +1,10 @@
-// src/main/java/space/tinkerlab/quantumCheckpoints/checkpoint/CheckpointManager.java
 package space.tinkerlab.quantumCheckpoints.checkpoint;
 
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
+import space.tinkerlab.quantumCheckpoints.util.LocationUtil;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,19 +13,12 @@ import java.util.stream.Collectors;
 
 /**
  * Manages all checkpoint operations including creation, deletion, and restoration.
- * Thread-safe implementation using ConcurrentHashMap.
  */
 public class CheckpointManager {
 
     private final QuantumCheckpoints plugin;
-
-    /** Maps location keys to checkpoints for fast location-based lookup */
     private final Map<String, Checkpoint> checkpointsByLocation;
-
-    /** Maps player UUIDs to their checkpoint IDs for ownership tracking */
     private final Map<UUID, Set<UUID>> checkpointsByPlayer;
-
-    /** Maps checkpoint IDs to checkpoints for direct access */
     private final Map<UUID, Checkpoint> checkpointsById;
 
     /**
@@ -41,81 +34,88 @@ public class CheckpointManager {
     }
 
     /**
-     * Creates a new checkpoint for a player at the specified location.
-     * Handles limit enforcement, cost deduction, and duplicate location handling.
+     * Attempts to create a checkpoint, handling costs, limits, and proximity conflicts.
+     * If a nearby checkpoint exists that would conflict, returns a proximity result
+     * so the caller can prompt for override confirmation.
      *
      * @param player   the player creating the checkpoint
-     * @param location the location for the checkpoint
+     * @param location the desired location
      * @return the result of the creation attempt
      */
     public CheckpointResult createCheckpoint(Player player, Location location) {
-        // Check if checkpoints are disabled
         if (!plugin.getConfigManager().isCheckpointsEnabled()) {
-            return CheckpointResult.failure("Checkpoints are currently disabled on this server.");
+            return CheckpointResult.failure("Checkpoints are currently disabled.");
         }
 
-        // Check and handle cost
+        // Check for nearby existing checkpoint
+        Checkpoint nearby = LocationUtil.findAnyCheckpointNear(plugin, location);
+        if (nearby != null && !nearby.getOwnerId().equals(player.getUniqueId())) {
+            // Owned by someone else — requires override confirmation
+            return CheckpointResult.proximityConflict(nearby);
+        }
+
         if (!handleCost(player)) {
-            return CheckpointResult.failure("You don't have enough resources to create a checkpoint.");
+            return CheckpointResult.failure("Insufficient resources. Cost: " +
+                    plugin.getConfigManager().getCostDescription());
         }
 
-        // Remove existing checkpoint at this location (if owned by this player)
-        String locationKey = Checkpoint.createLocationKey(location);
-        Checkpoint existing = checkpointsByLocation.get(locationKey);
-        if (existing != null) {
-            if (!existing.getOwnerId().equals(player.getUniqueId())) {
-                return CheckpointResult.failure("There is already a checkpoint at this location owned by another player.");
-            }
-            removeCheckpoint(existing);
+        // Remove any existing checkpoint at/near this location owned by this player
+        if (nearby != null) {
+            removeCheckpoint(nearby);
         }
 
-        // Check and enforce limit (remove oldest if necessary)
         enforceCheckpointLimit(player);
 
-        // Create the checkpoint
         PlayerState state = new PlayerState(player);
-        Checkpoint checkpoint = new Checkpoint(
-                player.getUniqueId(),
-                player.getName(),
-                location,
-                state
-        );
-
-        // Store the checkpoint
+        Checkpoint checkpoint = new Checkpoint(player.getUniqueId(), player.getName(), location, state);
         addCheckpoint(checkpoint);
-
-        // Create visual beam
         plugin.getBeamManager().createBeam(checkpoint);
 
         return CheckpointResult.success(checkpoint);
     }
 
     /**
-     * Handles the cost deduction for checkpoint creation.
+     * Force-creates a checkpoint, removing any conflicting checkpoint regardless of owner.
+     * Used after the player confirms an override.
      *
-     * @param player the player to deduct from
-     * @return true if cost was handled (either no cost or successfully deducted)
+     * @param player   the player creating the checkpoint
+     * @param location the desired location
+     * @param conflicting the checkpoint being overridden
+     * @return the result of the creation attempt
      */
+    public CheckpointResult forceCreateCheckpoint(Player player, Location location, Checkpoint conflicting) {
+        if (!plugin.getConfigManager().isCheckpointsEnabled()) {
+            return CheckpointResult.failure("Checkpoints are currently disabled.");
+        }
+
+        if (!handleCost(player)) {
+            return CheckpointResult.failure("Insufficient resources. Cost: " +
+                    plugin.getConfigManager().getCostDescription());
+        }
+
+        removeCheckpoint(conflicting);
+        enforceCheckpointLimit(player);
+
+        PlayerState state = new PlayerState(player);
+        Checkpoint checkpoint = new Checkpoint(player.getUniqueId(), player.getName(), location, state);
+        addCheckpoint(checkpoint);
+        plugin.getBeamManager().createBeam(checkpoint);
+
+        return CheckpointResult.success(checkpoint);
+    }
+
     private boolean handleCost(Player player) {
         ItemStack cost = plugin.getConfigManager().getCheckpointCost();
         if (cost == null) {
-            return true; // No cost configured
+            return true;
         }
-
         if (!player.getInventory().containsAtLeast(cost, cost.getAmount())) {
             return false;
         }
-
         player.getInventory().removeItem(cost);
         return true;
     }
 
-    /**
-     * Enforces the checkpoint limit for a player.
-     * Removes the oldest checkpoint if the limit would be exceeded.
-     *
-     * @param player the player to check
-     */
     private void enforceCheckpointLimit(Player player) {
         int limit = plugin.getConfigManager().getCheckpointLimit();
         Set<UUID> playerCheckpoints = checkpointsByPlayer.get(player.getUniqueId());
@@ -124,7 +124,6 @@ public class CheckpointManager {
             return;
         }
 
-        // Find and remove the oldest checkpoint
         Checkpoint oldest = playerCheckpoints.stream()
                 .map(checkpointsById::get)
                 .filter(Objects::nonNull)
@@ -144,7 +143,6 @@ public class CheckpointManager {
     public void addCheckpoint(Checkpoint checkpoint) {
         checkpointsById.put(checkpoint.getCheckpointId(), checkpoint);
         checkpointsByLocation.put(checkpoint.getLocationKey(), checkpoint);
-
         checkpointsByPlayer
                 .computeIfAbsent(checkpoint.getOwnerId(), k -> ConcurrentHashMap.newKeySet())
                 .add(checkpoint.getCheckpointId());
@@ -171,34 +169,28 @@ public class CheckpointManager {
     }
 
     /**
-     * Restores a checkpoint for a player, applying the penalty if configured.
+     * Restores a checkpoint state to a player, applying penalty if configured.
+     * Destroys the checkpoint after restoration.
      *
      * @param player     the player to restore
-     * @param checkpoint the checkpoint to restore
+     * @param checkpoint the checkpoint to restore from
      */
     public void restoreCheckpoint(Player player, Checkpoint checkpoint) {
-        // Restore the player state
         checkpoint.getPlayerState().restore(player);
 
-        // Apply penalty if enabled
         if (plugin.getConfigManager().isPenaltyEnabled()) {
             applyRestorationPenalty(player);
         }
 
-        // Remove the checkpoint after restoration
         removeCheckpoint(checkpoint);
     }
 
     /**
-     * Applies the restoration penalty by removing a random item from the inventory.
-     * Can remove from main inventory or armor slots.
-     *
-     * @param player the player to apply penalty to
+     * Randomly empties one occupied inventory slot (including armor and off-hand).
      */
     private void applyRestorationPenalty(Player player) {
         List<Integer> occupiedSlots = new ArrayList<>();
 
-        // Check main inventory (slots 0-35)
         ItemStack[] contents = player.getInventory().getContents();
         for (int i = 0; i < 36; i++) {
             if (contents[i] != null && !contents[i].getType().isAir()) {
@@ -206,7 +198,6 @@ public class CheckpointManager {
             }
         }
 
-        // Check armor slots (slots 36-39)
         ItemStack[] armor = player.getInventory().getArmorContents();
         for (int i = 0; i < armor.length; i++) {
             if (armor[i] != null && !armor[i].getType().isAir()) {
@@ -214,39 +205,47 @@ public class CheckpointManager {
             }
         }
 
-        // Check off-hand (slot 40)
         if (player.getInventory().getItemInOffHand().getType() != org.bukkit.Material.AIR) {
             occupiedSlots.add(40);
         }
 
         if (!occupiedSlots.isEmpty()) {
-            int randomSlot = occupiedSlots.get(ThreadLocalRandom.current().nextInt(occupiedSlots.size()));
-            player.getInventory().setItem(randomSlot, null);
+            int slot = occupiedSlots.get(ThreadLocalRandom.current().nextInt(occupiedSlots.size()));
+            player.getInventory().setItem(slot, null);
         }
     }
 
     /**
-     * Gets a checkpoint at the specified location.
+     * Gets a checkpoint by its unique ID.
+     *
+     * @param id the checkpoint UUID
+     * @return the checkpoint, or null if not found
+     */
+    public Checkpoint getCheckpointById(UUID id) {
+        return checkpointsById.get(id);
+    }
+
+    /**
+     * Gets a checkpoint at the exact block location.
      *
      * @param location the location to check
-     * @return the checkpoint, or null if none exists
+     * @return the checkpoint, or null if none exists at that exact block
      */
     public Checkpoint getCheckpointAt(Location location) {
         return checkpointsByLocation.get(Checkpoint.createLocationKey(location));
     }
 
     /**
-     * Gets all checkpoints owned by a player.
+     * Gets all checkpoints owned by a player, sorted by creation time.
      *
      * @param playerId the player's UUID
-     * @return a list of checkpoints owned by the player
+     * @return sorted list of the player's checkpoints
      */
     public List<Checkpoint> getCheckpointsForPlayer(UUID playerId) {
         Set<UUID> checkpointIds = checkpointsByPlayer.get(playerId);
         if (checkpointIds == null) {
             return Collections.emptyList();
         }
-
         return checkpointIds.stream()
                 .map(checkpointsById::get)
                 .filter(Objects::nonNull)
@@ -254,34 +253,19 @@ public class CheckpointManager {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Gets all checkpoints in the server.
-     *
-     * @return a collection of all checkpoints
-     */
     public Collection<Checkpoint> getAllCheckpoints() {
         return Collections.unmodifiableCollection(checkpointsById.values());
     }
 
-    /**
-     * Clears all checkpoints from the server.
-     */
     public void clearAllCheckpoints() {
-        // Remove all beams first
         for (Checkpoint checkpoint : checkpointsById.values()) {
             plugin.getBeamManager().removeBeam(checkpoint);
         }
-
         checkpointsById.clear();
         checkpointsByLocation.clear();
         checkpointsByPlayer.clear();
     }
 
-    /**
-     * Sets the enabled state for all checkpoints.
-     *
-     * @param enabled whether checkpoints should be enabled
-     */
     public void setAllCheckpointsEnabled(boolean enabled) {
         for (Checkpoint checkpoint : checkpointsById.values()) {
             checkpoint.setEnabled(enabled);
@@ -293,41 +277,51 @@ public class CheckpointManager {
         }
     }
 
-    /**
-     * Gets the count of checkpoints for a player.
-     *
-     * @param playerId the player's UUID
-     * @return the number of checkpoints
-     */
     public int getCheckpointCount(UUID playerId) {
         Set<UUID> checkpointIds = checkpointsByPlayer.get(playerId);
         return checkpointIds != null ? checkpointIds.size() : 0;
     }
 
     /**
-     * Result class for checkpoint creation operations.
+     * Encapsulates the result of a checkpoint creation attempt.
      */
     public static class CheckpointResult {
         private final boolean success;
+        private final boolean proximityConflict;
         private final String message;
         private final Checkpoint checkpoint;
 
-        private CheckpointResult(boolean success, String message, Checkpoint checkpoint) {
+        private CheckpointResult(boolean success, boolean proximityConflict,
+                                 String message, Checkpoint checkpoint) {
             this.success = success;
+            this.proximityConflict = proximityConflict;
             this.message = message;
             this.checkpoint = checkpoint;
         }
 
         public static CheckpointResult success(Checkpoint checkpoint) {
-            return new CheckpointResult(true, null, checkpoint);
+            return new CheckpointResult(true, false, null, checkpoint);
         }
 
         public static CheckpointResult failure(String message) {
-            return new CheckpointResult(false, message, null);
+            return new CheckpointResult(false, false, message, null);
+        }
+
+        /**
+         * Indicates that a nearby checkpoint owned by another player would be overridden.
+         *
+         * @param conflicting the conflicting checkpoint
+         */
+        public static CheckpointResult proximityConflict(Checkpoint conflicting) {
+            return new CheckpointResult(false, true, null, conflicting);
         }
 
         public boolean isSuccess() {
             return success;
+        }
+
+        public boolean isProximityConflict() {
+            return proximityConflict;
         }
 
         public String getMessage() {
