@@ -20,8 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages visual beam effects and labels for checkpoints.
- * Beams are only visible to the checkpoint owner via per-player particle
- * sending and hidden armor stands for other players.
+ * Beams are only visible to the checkpoint owner using Paper's
+ * per-entity default visibility API for O(1) visibility setup.
  */
 public class BeamManager {
 
@@ -67,12 +67,14 @@ public class BeamManager {
 
     /**
      * Spawns all entities that make up the checkpoint beam.
-     * After spawning, hides all armor stands from every online player
-     * except the owner.
+     * Uses setVisibleByDefault(false) so entities are hidden from all players,
+     * then explicitly shows them only to the owner. This is O(1) regardless
+     * of how many players are online.
      */
     private void spawnBeamEntities(Checkpoint checkpoint, Location location) {
         List<ArmorStand> entities = new ArrayList<>();
         Location baseCenter = location.clone().add(0.5, 0, 0.5);
+        UUID ownerId = checkpoint.getOwnerId();
 
         // Visible name label
         Location nameLabelLoc = baseCenter.clone().add(0, BEAM_HEIGHT - 1.0, 0);
@@ -103,61 +105,55 @@ public class BeamManager {
 
         checkpointEntities.put(checkpoint.getCheckpointId(), entities);
 
-        // Hide these entities from all non-owner players
-        hideFromNonOwners(checkpoint.getOwnerId(), entities);
-    }
-
-    /**
-     * Hides a list of armor stands from all online players except the owner.
-     * Uses the Paper API's per-player entity visibility.
-     *
-     * @param ownerId  the UUID of the checkpoint owner
-     * @param entities the armor stands to hide
-     */
-    private void hideFromNonOwners(UUID ownerId, List<ArmorStand> entities) {
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            if (!online.getUniqueId().equals(ownerId)) {
-                for (ArmorStand stand : entities) {
-                    online.hideEntity(plugin, stand);
-                }
+        // Show to owner if they're online (O(1) operation)
+        Player owner = Bukkit.getPlayer(ownerId);
+        if (owner != null && owner.isOnline()) {
+            for (ArmorStand stand : entities) {
+                owner.showEntity(plugin, stand);
             }
         }
     }
 
     /**
      * Updates visibility for a player who just joined.
-     * Hides all checkpoint entities that don't belong to them,
-     * and ensures their own are visible.
+     * Shows only their own checkpoint entities.
      *
      * @param player the player who joined
      */
     public void updateVisibilityForPlayer(Player player) {
         UUID playerId = player.getUniqueId();
 
+        // Only need to show entities the player owns.
+        // All others are already hidden by default.
         for (Map.Entry<UUID, List<ArmorStand>> entry : checkpointEntities.entrySet()) {
             UUID checkpointId = entry.getKey();
             List<ArmorStand> entities = entry.getValue();
 
-            // Determine if this checkpoint belongs to the player
-            var checkpoint = plugin.getCheckpointManager().getCheckpointById(checkpointId);
+            Checkpoint checkpoint = plugin.getCheckpointManager().getCheckpointById(checkpointId);
             if (checkpoint == null) continue;
 
-            boolean isOwner = checkpoint.getOwnerId().equals(playerId);
-
-            for (ArmorStand stand : entities) {
-                if (stand == null || stand.isDead()) continue;
-                if (isOwner) {
-                    player.showEntity(plugin, stand);
-                } else {
-                    player.hideEntity(plugin, stand);
+            // Only show if this player owns the checkpoint
+            if (checkpoint.getOwnerId().equals(playerId)) {
+                for (ArmorStand stand : entities) {
+                    if (stand != null && !stand.isDead()) {
+                        player.showEntity(plugin, stand);
+                    }
                 }
             }
+            // No need to hide — entities are hidden by default
         }
     }
 
+    /**
+     * Spawns a label armor stand that is hidden from all players by default.
+     */
     private ArmorStand spawnLabelStand(Location location, Checkpoint checkpoint,
                                        Component name, boolean marker) {
         ArmorStand stand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
+
+        // Hide from all players by default — this is the key optimization
+        stand.setVisibleByDefault(false);
+
         stand.setVisible(false);
         stand.setGravity(false);
         stand.setInvulnerable(true);
@@ -174,8 +170,15 @@ public class BeamManager {
         return stand;
     }
 
+    /**
+     * Spawns an interaction armor stand that is hidden from all players by default.
+     */
     private ArmorStand spawnInteractionStand(Location location, Checkpoint checkpoint) {
         ArmorStand stand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
+
+        // Hide from all players by default
+        stand.setVisibleByDefault(false);
+
         stand.setVisible(false);
         stand.setGravity(false);
         stand.setInvulnerable(true);
@@ -239,8 +242,7 @@ public class BeamManager {
 
     /**
      * Starts the particle effect task.
-     * Particles are sent only to the checkpoint owner using the per-player
-     * spawnParticle method, so other players cannot see them.
+     * Particles are sent only to the checkpoint owner.
      */
     private void startParticleTask() {
         particleTask = new BukkitRunnable() {
@@ -254,9 +256,8 @@ public class BeamManager {
 
                     Location base = checkpoint.getLocation();
 
-                    // Only render if owner is in the same world and within reasonable distance
                     if (!owner.getWorld().equals(base.getWorld())) continue;
-                    if (owner.getLocation().distanceSquared(base) > 10000) continue; // 100 blocks
+                    if (owner.getLocation().distanceSquared(base) > 10000) continue;
 
                     // Vertical beam — sent only to the owner
                     for (double y = 0; y < BEAM_HEIGHT; y += 0.5) {
