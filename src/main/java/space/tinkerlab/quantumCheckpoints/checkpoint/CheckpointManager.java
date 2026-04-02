@@ -94,14 +94,14 @@ public class CheckpointManager {
     }
 
     /**
-     * Finds a checkpoint owned by the specified player within proximity of a location.
+     * Finds a checkpoint owned by the specified player within the configured proximity radius.
      *
      * @param playerId the owner to match
      * @param location the location to search around
      * @return the nearby owned checkpoint, or null if none found
      */
     private Checkpoint findNearbyOwnedCheckpoint(UUID playerId, Location location) {
-        double radius = space.tinkerlab.quantumCheckpoints.util.LocationUtil.PROXIMITY_RADIUS;
+        double radius = plugin.getConfigManager().getProximityRadius();
 
         return getCheckpointsForPlayer(playerId).stream()
                 .filter(cp -> cp.getLocation().getWorld().equals(location.getWorld()))

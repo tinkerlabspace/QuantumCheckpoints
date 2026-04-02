@@ -11,11 +11,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages pending command confirmations for destructive operations.
- * Supports different confirmation types for different scenarios.
  */
 public class ConfirmationManager {
-
-    private static final long CONFIRMATION_TIMEOUT_SECONDS = 30;
 
     private final QuantumCheckpoints plugin;
     private final Map<UUID, PendingConfirmation> pendingConfirmations;
@@ -41,36 +38,36 @@ public class ConfirmationManager {
         UUID playerId = player.getUniqueId();
         cancelPendingConfirmation(playerId);
 
+        long timeout = plugin.getConfigManager().getConfirmationTimeout();
         PendingConfirmation confirmation = new PendingConfirmation(action, description);
         pendingConfirmations.put(playerId, confirmation);
 
         MessageUtil.warn(player, description);
-        MessageUtil.info(player, "§e/cp confirm §7to proceed, §e/cp cancel §7to abort. §8(" +
-                CONFIRMATION_TIMEOUT_SECONDS + "s)");
+        MessageUtil.info(player, "§e/cp confirm §7to proceed, §e/cp cancel §7to abort. §8(" + timeout + "s)");
 
-        scheduleTimeout(playerId, confirmation);
+        scheduleTimeout(playerId, confirmation, timeout);
     }
 
     /**
      * Requests confirmation for overriding the player's own nearby checkpoint.
      *
-     * @param player the player to prompt
-     * @param action the action to run on confirmation
-     * @param existingCheckpointOwner included for context (will always be the player themselves)
+     * @param player                  the player to prompt
+     * @param action                  the action to run on confirmation
+     * @param existingCheckpointOwner included for context
      */
     public void requestOverrideConfirmation(Player player, Runnable action, String existingCheckpointOwner) {
         UUID playerId = player.getUniqueId();
         cancelPendingConfirmation(playerId);
 
+        long timeout = plugin.getConfigManager().getConfirmationTimeout();
         String description = "You already have a checkpoint nearby. It will be replaced.";
         PendingConfirmation confirmation = new PendingConfirmation(action, description);
         pendingConfirmations.put(playerId, confirmation);
 
         MessageUtil.warn(player, description);
-        MessageUtil.info(player, "§e/cp confirm §7to replace it, §e/cp cancel §7to abort. §8(" +
-                CONFIRMATION_TIMEOUT_SECONDS + "s)");
+        MessageUtil.info(player, "§e/cp confirm §7to replace it, §e/cp cancel §7to abort. §8(" + timeout + "s)");
 
-        scheduleTimeout(playerId, confirmation);
+        scheduleTimeout(playerId, confirmation, timeout);
     }
 
     /**
@@ -108,14 +105,18 @@ public class ConfirmationManager {
         return pendingConfirmations.containsKey(player.getUniqueId());
     }
 
+    /**
+     * Clears all pending confirmations. Used during reload.
+     */
+    public void clearAll() {
+        pendingConfirmations.clear();
+    }
+
     private boolean cancelPendingConfirmation(UUID playerId) {
         return pendingConfirmations.remove(playerId) != null;
     }
 
-    /**
-     * Schedules automatic timeout for a pending confirmation.
-     */
-    private void scheduleTimeout(UUID playerId, PendingConfirmation confirmation) {
+    private void scheduleTimeout(UUID playerId, PendingConfirmation confirmation, long timeoutSeconds) {
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -126,7 +127,7 @@ public class ConfirmationManager {
                     }
                 }
             }
-        }.runTaskLater(plugin, CONFIRMATION_TIMEOUT_SECONDS * 20L);
+        }.runTaskLater(plugin, timeoutSeconds * 20L);
     }
 
     private record PendingConfirmation(Runnable action, String description) {}

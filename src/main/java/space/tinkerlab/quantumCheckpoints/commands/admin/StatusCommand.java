@@ -40,17 +40,39 @@ public class StatusCommand implements SubCommand {
 
     @Override
     public void execute(@NotNull CommandSender sender, @NotNull String[] args) {
-        boolean enabled = plugin.getConfigManager().isCheckpointsEnabled();
-        boolean penalty = plugin.getConfigManager().isPenaltyEnabled();
-        int limit = plugin.getConfigManager().getCheckpointLimit();
-        String cost = plugin.getConfigManager().getCostDescription();
-        int total = plugin.getCheckpointManager().getAllCheckpoints().size();
+        var config = plugin.getConfigManager();
 
-        MessageUtil.info(sender, "§6QuantumCheckpoints Status:");
-        MessageUtil.info(sender, " §7Enabled: " + (enabled ? "§aYes" : "§cNo"));
-        MessageUtil.info(sender, " §7Penalty: " + (penalty ? "§aYes" : "§cNo"));
-        MessageUtil.info(sender, " §7Limit: §e" + limit + " per player");
-        MessageUtil.info(sender, " §7Cost: §e" + cost);
-        MessageUtil.info(sender, " §7Total checkpoints: §e" + total);
+        MessageUtil.info(sender, "§6═══ QuantumCheckpoints Status ═══");
+
+        // Core
+        MessageUtil.info(sender, "§e Core Settings:");
+        MessageUtil.info(sender, "  §7Enabled: " + formatBoolean(config.isCheckpointsEnabled()));
+        MessageUtil.info(sender, "  §7Checkpoint Limit: §f" + config.getCheckpointLimit() + " per player");
+        MessageUtil.info(sender, "  §7Creation Cost: §f" + config.getCostDescription());
+
+        // Restoration
+        MessageUtil.info(sender, "§e Restoration:");
+        MessageUtil.info(sender, "  §7Penalty Enabled: " + formatBoolean(config.isPenaltyEnabled()));
+
+        // Proximity
+        MessageUtil.info(sender, "§e Proximity:");
+        MessageUtil.info(sender, "  §7Radius: §f" + config.getProximityRadius() + " blocks");
+
+        // Visual
+        MessageUtil.info(sender, "§e Visual:");
+        MessageUtil.info(sender, "  §7Beam Height: §f" + config.getBeamHeight() + " blocks");
+        MessageUtil.info(sender, "  §7View Distance: §f" + config.getParticleViewDistance() + " blocks");
+
+        // Confirmation
+        MessageUtil.info(sender, "§e Confirmation:");
+        MessageUtil.info(sender, "  §7Timeout: §f" + config.getConfirmationTimeout() + " seconds");
+
+        // Statistics
+        MessageUtil.info(sender, "§e Statistics:");
+        MessageUtil.info(sender, "  §7Total Checkpoints: §f" + plugin.getCheckpointManager().getAllCheckpoints().size());
+    }
+
+    private String formatBoolean(boolean value) {
+        return value ? "§aYes" : "§cNo";
     }
 }
