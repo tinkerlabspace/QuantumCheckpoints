@@ -1,4 +1,3 @@
-// src/main/java/space/tinkerlab/quantumCheckpoints/commands/CheckpointCommand.java
 package space.tinkerlab.quantumCheckpoints.commands;
 
 import org.bukkit.Location;
@@ -135,7 +134,6 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
      */
     private boolean handleDelete(Player player, String[] args) {
         if (args.length == 1) {
-            // Delete at current location
             return handleDeleteHere(player);
         }
 
@@ -143,7 +141,6 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
             return handleDeleteAll(player);
         }
 
-        // Delete at coordinates
         if (args.length >= 3) {
             return handleDeleteAtCoords(player, args[1], args[2]);
         }
@@ -154,9 +151,10 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
 
     /**
      * Handles deletion of a checkpoint at the player's current location.
+     * Requires confirmation since this is a destructive action.
      */
     private boolean handleDeleteHere(Player player) {
-        Checkpoint checkpoint = plugin.getCheckpointManager().getCheckpointAt(player.getLocation());
+        Checkpoint checkpoint = findCheckpointNearPlayer(player);
 
         if (checkpoint == null) {
             MessageUtil.error(player, "There is no checkpoint at your location.");
@@ -168,20 +166,29 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        plugin.getCheckpointManager().removeCheckpoint(checkpoint);
-        MessageUtil.success(player, "Checkpoint deleted.");
+        Location loc = checkpoint.getLocation();
+        plugin.getConfirmationManager().requestConfirmation(
+                player,
+                () -> {
+                    plugin.getCheckpointManager().removeCheckpoint(checkpoint);
+                    MessageUtil.success(player, "Checkpoint deleted.");
+                },
+                "Delete checkpoint at X: " + loc.getBlockX() +
+                        ", Y: " + loc.getBlockY() + ", Z: " + loc.getBlockZ() + "?"
+        );
+
         return true;
     }
 
     /**
      * Handles deletion of a checkpoint at specified coordinates.
+     * Requires confirmation since this is a destructive action.
      */
     private boolean handleDeleteAtCoords(Player player, String xStr, String zStr) {
         try {
             double x = parseCoordinate(xStr, player.getLocation().getX());
             double z = parseCoordinate(zStr, player.getLocation().getZ());
 
-            // Search for checkpoint at these coordinates (any Y level)
             Checkpoint checkpoint = findCheckpointAtXZ(player, (int) x, (int) z);
 
             if (checkpoint == null) {
@@ -189,8 +196,14 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
 
-            plugin.getCheckpointManager().removeCheckpoint(checkpoint);
-            MessageUtil.success(player, "Checkpoint at X: " + (int) x + ", Z: " + (int) z + " deleted.");
+            plugin.getConfirmationManager().requestConfirmation(
+                    player,
+                    () -> {
+                        plugin.getCheckpointManager().removeCheckpoint(checkpoint);
+                        MessageUtil.success(player, "Checkpoint at X: " + (int) x + ", Z: " + (int) z + " deleted.");
+                    },
+                    "Delete checkpoint at X: " + (int) x + ", Z: " + (int) z + "?"
+            );
         } catch (NumberFormatException e) {
             MessageUtil.error(player, "Invalid coordinates.");
         }
@@ -210,6 +223,46 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
+     * Finds a checkpoint near the player's current position.
+     * Uses a proximity search to account for slight positional differences
+     * between where the player stands and the checkpoint's stored location.
+     *
+     * @param player the player to search around
+     * @return the nearest owned checkpoint, or null if none found
+     */
+    private Checkpoint findCheckpointNearPlayer(Player player) {
+        Location playerLoc = player.getLocation();
+
+        // First try exact block match
+        Checkpoint exact = plugin.getCheckpointManager().getCheckpointAt(playerLoc);
+        if (exact != null) {
+            return exact;
+        }
+
+        // Search the player's own checkpoints within a reasonable radius
+        // This handles the drift between player position and stored checkpoint location
+        double searchRadius = 3.0;
+        return plugin.getCheckpointManager().getCheckpointsForPlayer(player.getUniqueId())
+                .stream()
+                .filter(cp -> cp.getLocation().getWorld().equals(playerLoc.getWorld()))
+                .filter(cp -> {
+                    Location cpLoc = cp.getLocation();
+                    double dx = cpLoc.getBlockX() - playerLoc.getBlockX();
+                    double dz = cpLoc.getBlockZ() - playerLoc.getBlockZ();
+                    double dy = cpLoc.getBlockY() - playerLoc.getBlockY();
+                    return Math.abs(dx) <= searchRadius
+                            && Math.abs(dz) <= searchRadius
+                            && Math.abs(dy) <= searchRadius;
+                })
+                .min((a, b) -> {
+                    double distA = a.getLocation().distanceSquared(playerLoc);
+                    double distB = b.getLocation().distanceSquared(playerLoc);
+                    return Double.compare(distA, distB);
+                })
+                .orElse(null);
+    }
+
+    /**
      * Handles deletion of all checkpoints for the player.
      */
     private boolean handleDeleteAll(Player player) {
@@ -225,7 +278,10 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
         plugin.getConfirmationManager().requestConfirmation(
                 player,
                 () -> {
-                    for (Checkpoint cp : checkpoints) {
+                    // Re-fetch to avoid stale references
+                    List<Checkpoint> current = plugin.getCheckpointManager()
+                            .getCheckpointsForPlayer(player.getUniqueId());
+                    for (Checkpoint cp : current) {
                         plugin.getCheckpointManager().removeCheckpoint(cp);
                     }
                     MessageUtil.success(player, "Deleted " + count + " checkpoint(s).");
@@ -271,12 +327,13 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
 
     /**
      * Handles restoration of a checkpoint at the player's current location.
+     * Uses proximity search to find the nearest checkpoint the player owns.
      */
     private boolean handleRestore(Player player) {
-        Checkpoint checkpoint = plugin.getCheckpointManager().getCheckpointAt(player.getLocation());
+        Checkpoint checkpoint = findCheckpointNearPlayer(player);
 
         if (checkpoint == null) {
-            MessageUtil.error(player, "There is no checkpoint at your location.");
+            MessageUtil.error(player, "There is no checkpoint near your location.");
             return true;
         }
 
@@ -326,7 +383,8 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1) {
-            return filterCompletions(Arrays.asList("here", "delete", "list", "restore", "confirm", "cancel"), args[0]);
+            return filterCompletions(
+                    Arrays.asList("here", "delete", "list", "restore", "confirm", "cancel"), args[0]);
         }
 
         if (args.length == 2 && args[0].equalsIgnoreCase("delete")) {

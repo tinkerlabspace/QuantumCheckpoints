@@ -81,10 +81,11 @@ public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
 
     /**
      * Handles the cost subcommand.
+     * Supports 'none'/'free' as single argument to remove cost,
+     * or '<item> <amount>' to set a specific cost.
      */
     private boolean handleCost(CommandSender sender, String[] args) {
-        if (args.length < 3) {
-            // Show current cost or usage
+        if (args.length < 2) {
             String currentCost = plugin.getConfigManager().getCostDescription();
             MessageUtil.info(sender, "Current cost: §e" + currentCost);
             MessageUtil.info(sender, "Usage: /checkpoints cost <item> <amount>");
@@ -92,9 +93,16 @@ public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        // Handle 'none' and 'free' as special single-argument cases first
         if (args[1].equalsIgnoreCase("none") || args[1].equalsIgnoreCase("free")) {
             plugin.getConfigManager().setCheckpointCost(null);
             MessageUtil.success(sender, "Checkpoint creation is now free.");
+            return true;
+        }
+
+        // Setting a material cost requires both material and amount
+        if (args.length < 3) {
+            MessageUtil.error(sender, "Usage: /checkpoints cost <item> <amount>");
             return true;
         }
 

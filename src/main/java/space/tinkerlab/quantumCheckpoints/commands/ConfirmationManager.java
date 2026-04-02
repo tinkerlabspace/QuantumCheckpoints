@@ -34,6 +34,7 @@ public class ConfirmationManager {
 
     /**
      * Requests confirmation from a player for a destructive action.
+     * Shows appropriate confirmation command based on player permissions.
      *
      * @param player      the player to request confirmation from
      * @param action      the action to confirm
@@ -49,9 +50,17 @@ public class ConfirmationManager {
         pendingConfirmations.put(playerId, confirmation);
 
         MessageUtil.warn(player, "⚠ " + description);
-        MessageUtil.info(player, "Type §e/checkpoint confirm§7 or §e/checkpoints confirm§7 within " +
-                CONFIRMATION_TIMEOUT_SECONDS + " seconds to confirm.");
-        MessageUtil.info(player, "Type §e/checkpoint cancel§7 to cancel.");
+
+        // Only show commands the player can actually use
+        if (player.hasPermission("quantumcheckpoints.admin")) {
+            MessageUtil.info(player, "Type §e/checkpoint confirm§7 or §e/checkpoints confirm§7 within " +
+                    CONFIRMATION_TIMEOUT_SECONDS + " seconds to confirm.");
+            MessageUtil.info(player, "Type §e/checkpoint cancel§7 or §e/checkpoints cancel§7 to cancel.");
+        } else {
+            MessageUtil.info(player, "Type §e/checkpoint confirm§7 within " +
+                    CONFIRMATION_TIMEOUT_SECONDS + " seconds to confirm.");
+            MessageUtil.info(player, "Type §e/checkpoint cancel§7 to cancel.");
+        }
 
         // Schedule timeout
         new BukkitRunnable() {
