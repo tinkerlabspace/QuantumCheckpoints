@@ -12,6 +12,8 @@ import space.tinkerlab.quantumCheckpoints.listeners.CheckpointInteractionListene
 import space.tinkerlab.quantumCheckpoints.listeners.GUIListener;
 import space.tinkerlab.quantumCheckpoints.storage.DataManager;
 import space.tinkerlab.quantumCheckpoints.visual.BeamManager;
+import space.tinkerlab.quantumCheckpoints.listeners.PlayerJoinListener;
+
 
 import java.util.Objects;
 
@@ -100,6 +102,7 @@ public final class QuantumCheckpoints extends JavaPlugin {
     private void registerListeners() {
         getServer().getPluginManager().registerEvents(new CheckpointInteractionListener(this), this);
         getServer().getPluginManager().registerEvents(new GUIListener(this), this);
+        getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
     }
 
     /**
