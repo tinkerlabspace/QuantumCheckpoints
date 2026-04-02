@@ -25,6 +25,21 @@ cost:
 penalty-enabled: true
 
 # =============================================================================
+# AUTO CHECKPOINT SETTINGS
+# =============================================================================
+
+# Whether auto-checkpointing is enabled server-wide
+auto-checkpoint-enabled: true
+
+# Default interval in minutes between automatic checkpoints
+# Players can override this with their own interval
+auto-checkpoint-interval: 10
+
+# Minimum interval in minutes that players are allowed to set
+# Prevents players from setting excessively short intervals
+auto-checkpoint-min-interval: 1
+
+# =============================================================================
 # PROXIMITY SETTINGS
 # =============================================================================
 

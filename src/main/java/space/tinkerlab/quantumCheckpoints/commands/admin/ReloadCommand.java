@@ -35,14 +35,17 @@ public class ReloadCommand implements SubCommand {
 
     @Override
     public void execute(@NotNull CommandSender sender, @NotNull String[] args) {
-        // Clear pending confirmations as timeout values may have changed
+        // Clear pending confirmations
         plugin.getConfirmationManager().clearAll();
 
         // Reload config
         plugin.getConfigManager().reload();
 
-        // Recreate beams to reflect any visual changes
+        // Recreate beams to reflect visual changes
         plugin.getBeamManager().recreateAllBeams();
+
+        // Restart auto-checkpoint system with new settings
+        plugin.getAutoCheckpointManager().restart();
 
         MessageUtil.success(sender, "Configuration reloaded successfully.");
     }

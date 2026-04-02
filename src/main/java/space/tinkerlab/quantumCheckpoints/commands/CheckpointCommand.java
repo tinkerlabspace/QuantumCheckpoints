@@ -42,6 +42,7 @@ public class CheckpointCommand implements CommandExecutor, TabCompleter {
         registry.register(new DeleteAllCommand(plugin));
         registry.register(new ListCommand(plugin));
         registry.register(new RestoreCommand(plugin));
+        registry.register(new AutoCommand(plugin));
         registry.register(new ConfirmCommand(plugin));
         registry.register(new CancelCommand(plugin));
     }

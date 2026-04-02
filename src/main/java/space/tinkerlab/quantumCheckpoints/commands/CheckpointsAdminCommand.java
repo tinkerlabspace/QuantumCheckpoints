@@ -43,6 +43,9 @@ public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
         registry.register(new EnableCommand(plugin));
         registry.register(new ClearCommand(plugin));
 
+        // Auto checkpoint
+        registry.register(new AutoCheckpointCommand(plugin));
+
         // Proximity
         registry.register(new ProximityCommand(plugin));
 

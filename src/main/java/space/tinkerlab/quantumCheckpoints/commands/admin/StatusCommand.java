@@ -54,6 +54,12 @@ public class StatusCommand implements SubCommand {
         MessageUtil.info(sender, "§e Restoration:");
         MessageUtil.info(sender, "  §7Penalty Enabled: " + formatBoolean(config.isPenaltyEnabled()));
 
+        // Auto
+        MessageUtil.info(sender, "§e Auto-Checkpoint:");
+        MessageUtil.info(sender, "  §7Enabled: " + formatBoolean(config.isAutoCheckpointEnabled()));
+        MessageUtil.info(sender, "  §7Default Interval: §f" + config.getAutoCheckpointInterval() + " min");
+        MessageUtil.info(sender, "  §7Min Player Interval: §f" + config.getAutoCheckpointMinInterval() + " min");
+
         // Proximity
         MessageUtil.info(sender, "§e Proximity:");
         MessageUtil.info(sender, "  §7Radius: §f" + config.getProximityRadius() + " blocks");
@@ -69,7 +75,8 @@ public class StatusCommand implements SubCommand {
 
         // Statistics
         MessageUtil.info(sender, "§e Statistics:");
-        MessageUtil.info(sender, "  §7Total Checkpoints: §f" + plugin.getCheckpointManager().getAllCheckpoints().size());
+        MessageUtil.info(sender, "  §7Total Checkpoints: §f" +
+                plugin.getCheckpointManager().getAllCheckpoints().size());
     }
 
     private String formatBoolean(boolean value) {
