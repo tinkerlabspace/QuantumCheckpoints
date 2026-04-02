@@ -52,17 +52,17 @@ public class ConfirmationManager {
     }
 
     /**
-     * Requests confirmation specifically for overriding a nearby checkpoint.
+     * Requests confirmation for overriding the player's own nearby checkpoint.
      *
-     * @param player       the player to prompt
-     * @param action       the action to run on confirmation
-     * @param ownerName    the name of the nearby checkpoint's owner
+     * @param player the player to prompt
+     * @param action the action to run on confirmation
+     * @param existingCheckpointOwner included for context (will always be the player themselves)
      */
-    public void requestOverrideConfirmation(Player player, Runnable action, String ownerName) {
+    public void requestOverrideConfirmation(Player player, Runnable action, String existingCheckpointOwner) {
         UUID playerId = player.getUniqueId();
         cancelPendingConfirmation(playerId);
 
-        String description = "A checkpoint by §e" + ownerName + " §eis nearby and will be replaced.";
+        String description = "You already have a checkpoint nearby. It will be replaced.";
         PendingConfirmation confirmation = new PendingConfirmation(action, description);
         pendingConfirmations.put(playerId, confirmation);
 

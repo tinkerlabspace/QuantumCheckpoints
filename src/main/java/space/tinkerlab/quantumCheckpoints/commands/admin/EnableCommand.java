@@ -1,5 +1,6 @@
 package space.tinkerlab.quantumCheckpoints.commands.admin;
 
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
  * Handles '/checkpoints enable [true/false]'.
  * true (default): enables and restores previous checkpoints.
  * false: clears all checkpoints and enables fresh.
+ * Console executes immediately without confirmation.
  */
 public class EnableCommand implements SubCommand {
 
@@ -29,20 +31,42 @@ public class EnableCommand implements SubCommand {
     }
 
     @Override
+    public boolean supportsConsole() {
+        return true;
+    }
+
+    @Override
     public void execute(@NotNull Player player, @NotNull String[] args) {
         boolean restoreExisting = args.length == 0 || Boolean.parseBoolean(args[0]);
 
         if (restoreExisting) {
+            executeEnable(player, true);
+        } else {
+            plugin.getConfirmationManager().requestConfirmation(player, () -> {
+                executeEnable(player, false);
+            }, "Clear ALL checkpoints and enable fresh?");
+        }
+    }
+
+    @Override
+    public void execute(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (sender instanceof Player player) {
+            execute(player, args);
+            return;
+        }
+        boolean restoreExisting = args.length == 0 || Boolean.parseBoolean(args[0]);
+        executeEnable(sender, restoreExisting);
+    }
+
+    private void executeEnable(CommandSender sender, boolean restoreExisting) {
+        if (restoreExisting) {
             plugin.getConfigManager().setCheckpointsEnabled(true);
             plugin.getCheckpointManager().setAllCheckpointsEnabled(true);
-            MessageUtil.success(player, "Checkpoints enabled. Existing checkpoints restored.");
+            MessageUtil.success(sender, "Checkpoints enabled. Existing checkpoints restored.");
         } else {
-            // Destructive — requires confirmation
-            plugin.getConfirmationManager().requestConfirmation(player, () -> {
-                plugin.getCheckpointManager().clearAllCheckpoints();
-                plugin.getConfigManager().setCheckpointsEnabled(true);
-                MessageUtil.success(player, "All checkpoints cleared. System enabled fresh.");
-            }, "Clear ALL checkpoints and enable fresh?");
+            plugin.getCheckpointManager().clearAllCheckpoints();
+            plugin.getConfigManager().setCheckpointsEnabled(true);
+            MessageUtil.success(sender, "All checkpoints cleared. System enabled fresh.");
         }
     }
 

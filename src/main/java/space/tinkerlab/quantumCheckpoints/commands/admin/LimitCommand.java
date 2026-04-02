@@ -1,5 +1,6 @@
 package space.tinkerlab.quantumCheckpoints.commands.admin;
 
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
@@ -27,9 +28,19 @@ public class LimitCommand implements SubCommand {
     }
 
     @Override
+    public boolean supportsConsole() {
+        return true;
+    }
+
+    @Override
     public void execute(@NotNull Player player, @NotNull String[] args) {
+        execute((CommandSender) player, args);
+    }
+
+    @Override
+    public void execute(@NotNull CommandSender sender, @NotNull String[] args) {
         if (args.length == 0) {
-            MessageUtil.info(player, "Current limit: §e" +
+            MessageUtil.info(sender, "Current limit: §e" +
                     plugin.getConfigManager().getCheckpointLimit() + " per player");
             return;
         }
@@ -37,13 +48,13 @@ public class LimitCommand implements SubCommand {
         try {
             int limit = Integer.parseInt(args[0]);
             if (limit <= 0) {
-                MessageUtil.error(player, "Limit must be greater than 0.");
+                MessageUtil.error(sender, "Limit must be greater than 0.");
                 return;
             }
             plugin.getConfigManager().setCheckpointLimit(limit);
-            MessageUtil.success(player, "Checkpoint limit set to " + limit + ".");
+            MessageUtil.success(sender, "Checkpoint limit set to " + limit + ".");
         } catch (NumberFormatException e) {
-            MessageUtil.error(player, "Invalid number: " + args[0]);
+            MessageUtil.error(sender, "Invalid number: " + args[0]);
         }
     }
 

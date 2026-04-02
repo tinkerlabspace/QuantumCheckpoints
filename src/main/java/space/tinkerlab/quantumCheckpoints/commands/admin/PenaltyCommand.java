@@ -1,5 +1,6 @@
 package space.tinkerlab.quantumCheckpoints.commands.admin;
 
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
@@ -27,16 +28,26 @@ public class PenaltyCommand implements SubCommand {
     }
 
     @Override
+    public boolean supportsConsole() {
+        return true;
+    }
+
+    @Override
     public void execute(@NotNull Player player, @NotNull String[] args) {
+        execute((CommandSender) player, args);
+    }
+
+    @Override
+    public void execute(@NotNull CommandSender sender, @NotNull String[] args) {
         if (args.length == 0) {
             boolean current = plugin.getConfigManager().isPenaltyEnabled();
-            MessageUtil.info(player, "Penalty is " + (current ? "§aenabled" : "§cdisabled") + "§7.");
+            MessageUtil.info(sender, "Penalty is " + (current ? "§aenabled" : "§cdisabled") + "§7.");
             return;
         }
 
         boolean enabled = Boolean.parseBoolean(args[0]);
         plugin.getConfigManager().setPenaltyEnabled(enabled);
-        MessageUtil.success(player, "Penalty " + (enabled ? "enabled" : "disabled") + ".");
+        MessageUtil.success(sender, "Penalty " + (enabled ? "enabled" : "disabled") + ".");
     }
 
     @Override

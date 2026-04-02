@@ -4,7 +4,6 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
-import space.tinkerlab.quantumCheckpoints.util.LocationUtil;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,9 +33,9 @@ public class CheckpointManager {
     }
 
     /**
-     * Attempts to create a checkpoint, handling costs, limits, and proximity conflicts.
-     * If a nearby checkpoint exists that would conflict, returns a proximity result
-     * so the caller can prompt for override confirmation.
+     * Attempts to create a checkpoint. If the player already has a checkpoint
+     * within proximity, returns a proximity conflict so the caller can ask
+     * for override confirmation before proceeding.
      *
      * @param player   the player creating the checkpoint
      * @param location the desired location
@@ -47,21 +46,41 @@ public class CheckpointManager {
             return CheckpointResult.failure("Checkpoints are currently disabled.");
         }
 
-        // Check for nearby existing checkpoint
-        Checkpoint nearby = LocationUtil.findAnyCheckpointNear(plugin, location);
-        if (nearby != null && !nearby.getOwnerId().equals(player.getUniqueId())) {
-            // Owned by someone else — requires override confirmation
-            return CheckpointResult.proximityConflict(nearby);
+        // Only check the creating player's own checkpoints for proximity conflicts.
+        // Different players are allowed to have checkpoints near each other.
+        Checkpoint ownNearby = findNearbyOwnedCheckpoint(player.getUniqueId(), location);
+        if (ownNearby != null) {
+            return CheckpointResult.proximityConflict(ownNearby);
         }
 
+        return executeCreate(player, location);
+    }
+
+    /**
+     * Force-creates a checkpoint after the player confirmed overriding their
+     * own nearby checkpoint.
+     *
+     * @param player      the player creating the checkpoint
+     * @param location    the desired location
+     * @param conflicting the player's own checkpoint to remove first
+     * @return the result of the creation attempt
+     */
+    public CheckpointResult forceCreateCheckpoint(Player player, Location location, Checkpoint conflicting) {
+        if (!plugin.getConfigManager().isCheckpointsEnabled()) {
+            return CheckpointResult.failure("Checkpoints are currently disabled.");
+        }
+
+        removeCheckpoint(conflicting);
+        return executeCreate(player, location);
+    }
+
+    /**
+     * Shared creation logic after proximity checks have passed.
+     */
+    private CheckpointResult executeCreate(Player player, Location location) {
         if (!handleCost(player)) {
             return CheckpointResult.failure("Insufficient resources. Cost: " +
                     plugin.getConfigManager().getCostDescription());
-        }
-
-        // Remove any existing checkpoint at/near this location owned by this player
-        if (nearby != null) {
-            removeCheckpoint(nearby);
         }
 
         enforceCheckpointLimit(player);
@@ -75,33 +94,25 @@ public class CheckpointManager {
     }
 
     /**
-     * Force-creates a checkpoint, removing any conflicting checkpoint regardless of owner.
-     * Used after the player confirms an override.
+     * Finds a checkpoint owned by the specified player within proximity of a location.
      *
-     * @param player   the player creating the checkpoint
-     * @param location the desired location
-     * @param conflicting the checkpoint being overridden
-     * @return the result of the creation attempt
+     * @param playerId the owner to match
+     * @param location the location to search around
+     * @return the nearby owned checkpoint, or null if none found
      */
-    public CheckpointResult forceCreateCheckpoint(Player player, Location location, Checkpoint conflicting) {
-        if (!plugin.getConfigManager().isCheckpointsEnabled()) {
-            return CheckpointResult.failure("Checkpoints are currently disabled.");
-        }
+    private Checkpoint findNearbyOwnedCheckpoint(UUID playerId, Location location) {
+        double radius = space.tinkerlab.quantumCheckpoints.util.LocationUtil.PROXIMITY_RADIUS;
 
-        if (!handleCost(player)) {
-            return CheckpointResult.failure("Insufficient resources. Cost: " +
-                    plugin.getConfigManager().getCostDescription());
-        }
-
-        removeCheckpoint(conflicting);
-        enforceCheckpointLimit(player);
-
-        PlayerState state = new PlayerState(player);
-        Checkpoint checkpoint = new Checkpoint(player.getUniqueId(), player.getName(), location, state);
-        addCheckpoint(checkpoint);
-        plugin.getBeamManager().createBeam(checkpoint);
-
-        return CheckpointResult.success(checkpoint);
+        return getCheckpointsForPlayer(playerId).stream()
+                .filter(cp -> cp.getLocation().getWorld().equals(location.getWorld()))
+                .filter(cp -> {
+                    Location cpLoc = cp.getLocation();
+                    return Math.abs(cpLoc.getBlockX() - location.getBlockX()) <= radius
+                            && Math.abs(cpLoc.getBlockY() - location.getBlockY()) <= radius
+                            && Math.abs(cpLoc.getBlockZ() - location.getBlockZ()) <= radius;
+                })
+                .findFirst()
+                .orElse(null);
     }
 
     private boolean handleCost(Player player) {
@@ -185,9 +196,6 @@ public class CheckpointManager {
         removeCheckpoint(checkpoint);
     }
 
-    /**
-     * Randomly empties one occupied inventory slot (including armor and off-hand).
-     */
     private void applyRestorationPenalty(Player player) {
         List<Integer> occupiedSlots = new ArrayList<>();
 
@@ -225,22 +233,10 @@ public class CheckpointManager {
         return checkpointsById.get(id);
     }
 
-    /**
-     * Gets a checkpoint at the exact block location.
-     *
-     * @param location the location to check
-     * @return the checkpoint, or null if none exists at that exact block
-     */
     public Checkpoint getCheckpointAt(Location location) {
         return checkpointsByLocation.get(Checkpoint.createLocationKey(location));
     }
 
-    /**
-     * Gets all checkpoints owned by a player, sorted by creation time.
-     *
-     * @param playerId the player's UUID
-     * @return sorted list of the player's checkpoints
-     */
     public List<Checkpoint> getCheckpointsForPlayer(UUID playerId) {
         Set<UUID> checkpointIds = checkpointsByPlayer.get(playerId);
         if (checkpointIds == null) {
@@ -307,29 +303,13 @@ public class CheckpointManager {
             return new CheckpointResult(false, false, message, null);
         }
 
-        /**
-         * Indicates that a nearby checkpoint owned by another player would be overridden.
-         *
-         * @param conflicting the conflicting checkpoint
-         */
         public static CheckpointResult proximityConflict(Checkpoint conflicting) {
             return new CheckpointResult(false, true, null, conflicting);
         }
 
-        public boolean isSuccess() {
-            return success;
-        }
-
-        public boolean isProximityConflict() {
-            return proximityConflict;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public Checkpoint getCheckpoint() {
-            return checkpoint;
-        }
+        public boolean isSuccess() { return success; }
+        public boolean isProximityConflict() { return proximityConflict; }
+        public String getMessage() { return message; }
+        public Checkpoint getCheckpoint() { return checkpoint; }
     }
 }

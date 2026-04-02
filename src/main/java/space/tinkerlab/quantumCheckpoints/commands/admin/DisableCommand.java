@@ -1,5 +1,6 @@
 package space.tinkerlab.quantumCheckpoints.commands.admin;
 
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
  * Handles '/checkpoints disable [true/false]'.
  * true (default): disables all existing checkpoints.
  * false: only prevents creation of new ones.
+ * Console executes immediately without confirmation.
  */
 public class DisableCommand implements SubCommand {
 
@@ -29,6 +31,11 @@ public class DisableCommand implements SubCommand {
     }
 
     @Override
+    public boolean supportsConsole() {
+        return true;
+    }
+
+    @Override
     public void execute(@NotNull Player player, @NotNull String[] args) {
         boolean disableExisting = args.length == 0 || Boolean.parseBoolean(args[0]);
 
@@ -37,14 +44,29 @@ public class DisableCommand implements SubCommand {
                 : "Prevent new checkpoints? (existing ones stay active)";
 
         plugin.getConfirmationManager().requestConfirmation(player, () -> {
-            plugin.getConfigManager().setCheckpointsEnabled(false);
-            if (disableExisting) {
-                plugin.getCheckpointManager().setAllCheckpointsEnabled(false);
-                MessageUtil.success(player, "All checkpoints disabled.");
-            } else {
-                MessageUtil.success(player, "New checkpoint creation disabled.");
-            }
+            executeDisable(player, disableExisting);
         }, desc);
+    }
+
+    @Override
+    public void execute(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (sender instanceof Player player) {
+            execute(player, args);
+            return;
+        }
+        // Console skips confirmation
+        boolean disableExisting = args.length == 0 || Boolean.parseBoolean(args[0]);
+        executeDisable(sender, disableExisting);
+    }
+
+    private void executeDisable(CommandSender sender, boolean disableExisting) {
+        plugin.getConfigManager().setCheckpointsEnabled(false);
+        if (disableExisting) {
+            plugin.getCheckpointManager().setAllCheckpointsEnabled(false);
+            MessageUtil.success(sender, "All checkpoints disabled.");
+        } else {
+            MessageUtil.success(sender, "New checkpoint creation disabled.");
+        }
     }
 
     @Override

@@ -1,19 +1,18 @@
 package space.tinkerlab.quantumCheckpoints.checkpoint;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-import java.io.Serializable;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Represents a snapshot of a player's state at a specific point in time.
  * Captures inventory, armor, off-hand, XP, health, and hunger levels.
  */
-public class PlayerState implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class PlayerState {
 
     private final ItemStack[] inventoryContents;
     private final ItemStack[] armorContents;
@@ -31,7 +30,6 @@ public class PlayerState implements Serializable {
      * @param player the player whose state to capture
      */
     public PlayerState(Player player) {
-        // Clone all inventory items to prevent reference issues
         this.inventoryContents = cloneItemArray(player.getInventory().getContents());
         this.armorContents = cloneItemArray(player.getInventory().getArmorContents());
         this.offHandItem = player.getInventory().getItemInOffHand().clone();
@@ -46,12 +44,11 @@ public class PlayerState implements Serializable {
     }
 
     /**
-     * Creates a PlayerState from serialized data.
-     * Used when loading from storage.
+     * Creates a PlayerState from stored values.
      */
-    public PlayerState(ItemStack[] inventoryContents, ItemStack[] armorContents,
-                       ItemStack offHandItem, int totalExperience, int experienceLevel,
-                       float experienceProgress, double health, int foodLevel, float saturation) {
+    private PlayerState(ItemStack[] inventoryContents, ItemStack[] armorContents,
+                        ItemStack offHandItem, int totalExperience, int experienceLevel,
+                        float experienceProgress, double health, int foodLevel, float saturation) {
         this.inventoryContents = inventoryContents;
         this.armorContents = armorContents;
         this.offHandItem = offHandItem;
@@ -84,9 +81,6 @@ public class PlayerState implements Serializable {
 
     /**
      * Clones an array of ItemStacks to prevent reference issues.
-     *
-     * @param original the original array
-     * @return a cloned array with cloned items
      */
     private ItemStack[] cloneItemArray(ItemStack[] original) {
         if (original == null) return null;
@@ -98,49 +92,52 @@ public class PlayerState implements Serializable {
     }
 
     /**
-     * Converts this state to a Map for YAML serialization.
+     * Serializes this state into a ConfigurationSection.
+     * ItemStack arrays are stored as lists, which Bukkit's YAML
+     * serializer handles natively (preserving all NBT data).
      *
-     * @return a map representation of this state
+     * @param section the section to write into
      */
-    public Map<String, Object> serialize() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("inventoryContents", inventoryContents);
-        map.put("armorContents", armorContents);
-        map.put("offHandItem", offHandItem);
-        map.put("totalExperience", totalExperience);
-        map.put("experienceLevel", experienceLevel);
-        map.put("experienceProgress", experienceProgress);
-        map.put("health", health);
-        map.put("foodLevel", foodLevel);
-        map.put("saturation", saturation);
-        return map;
+    public void serialize(ConfigurationSection section) {
+        section.set("inventoryContents", Arrays.asList(inventoryContents));
+        section.set("armorContents", Arrays.asList(armorContents));
+        section.set("offHandItem", offHandItem);
+        section.set("totalExperience", totalExperience);
+        section.set("experienceLevel", experienceLevel);
+        section.set("experienceProgress", (double) experienceProgress);
+        section.set("health", health);
+        section.set("foodLevel", foodLevel);
+        section.set("saturation", (double) saturation);
     }
 
     /**
-     * Creates a PlayerState from a serialized Map.
+     * Deserializes a PlayerState from a ConfigurationSection.
      *
-     * @param map the serialized data
+     * @param section the section to read from
      * @return the deserialized PlayerState
      */
     @SuppressWarnings("unchecked")
-    public static PlayerState deserialize(Map<String, Object> map) {
-        ItemStack[] inventory = ((java.util.List<ItemStack>) map.get("inventoryContents"))
-                .toArray(new ItemStack[0]);
-        ItemStack[] armor = ((java.util.List<ItemStack>) map.get("armorContents"))
-                .toArray(new ItemStack[0]);
-        ItemStack offHand = (ItemStack) map.get("offHandItem");
-        int totalExp = (int) map.get("totalExperience");
-        int expLevel = (int) map.get("experienceLevel");
-        float expProgress = ((Number) map.get("experienceProgress")).floatValue();
-        double health = ((Number) map.get("health")).doubleValue();
-        int food = (int) map.get("foodLevel");
-        float saturation = ((Number) map.get("saturation")).floatValue();
+    public static PlayerState deserialize(ConfigurationSection section) {
+        // Bukkit deserializes ItemStack lists as List<ItemStack> (with nulls for empty slots)
+        List<?> rawInventory = section.getList("inventoryContents", new ArrayList<>());
+        ItemStack[] inventory = rawInventory.toArray(new ItemStack[0]);
+
+        List<?> rawArmor = section.getList("armorContents", new ArrayList<>());
+        ItemStack[] armor = rawArmor.toArray(new ItemStack[0]);
+
+        ItemStack offHand = section.getItemStack("offHandItem");
+
+        int totalExp = section.getInt("totalExperience");
+        int expLevel = section.getInt("experienceLevel");
+        float expProgress = (float) section.getDouble("experienceProgress");
+        double health = section.getDouble("health");
+        int food = section.getInt("foodLevel");
+        float saturation = (float) section.getDouble("saturation");
 
         return new PlayerState(inventory, armor, offHand, totalExp, expLevel,
                 expProgress, health, food, saturation);
     }
 
-    // Getters for accessing state data
     public ItemStack[] getInventoryContents() {
         return inventoryContents;
     }
@@ -149,7 +146,7 @@ public class PlayerState implements Serializable {
         return armorContents;
     }
 
-    public ItemStack offHandItem() {
+    public ItemStack getOffHandItem() {
         return offHandItem;
     }
 

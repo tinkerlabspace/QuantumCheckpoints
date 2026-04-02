@@ -1,16 +1,14 @@
-// src/main/java/space/tinkerlab/quantumCheckpoints/checkpoint/Checkpoint.java
 package space.tinkerlab.quantumCheckpoints.checkpoint;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -33,9 +31,9 @@ public class Checkpoint {
     /**
      * Creates a new checkpoint with the specified parameters.
      *
-     * @param ownerId    the UUID of the player who owns this checkpoint
-     * @param ownerName  the name of the player who owns this checkpoint
-     * @param location   the location of the checkpoint
+     * @param ownerId     the UUID of the player who owns this checkpoint
+     * @param ownerName   the name of the player who owns this checkpoint
+     * @param location    the location of the checkpoint
      * @param playerState the saved player state
      */
     public Checkpoint(UUID ownerId, String ownerName, Location location, PlayerState playerState) {
@@ -50,11 +48,10 @@ public class Checkpoint {
 
     /**
      * Creates a checkpoint from serialized data.
-     * Used when loading from storage.
      */
-    public Checkpoint(UUID checkpointId, UUID ownerId, String ownerName,
-                      Location location, long creationTime,
-                      PlayerState playerState, boolean enabled) {
+    private Checkpoint(UUID checkpointId, UUID ownerId, String ownerName,
+                       Location location, long creationTime,
+                       PlayerState playerState, boolean enabled) {
         this.checkpointId = checkpointId;
         this.ownerId = ownerId;
         this.ownerName = ownerName;
@@ -99,61 +96,63 @@ public class Checkpoint {
     }
 
     /**
-     * Converts this checkpoint to a Map for YAML serialization.
+     * Serializes this checkpoint into a ConfigurationSection.
      *
-     * @return a map representation of this checkpoint
+     * @param section the section to write into
      */
-    public Map<String, Object> serialize() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("checkpointId", checkpointId.toString());
-        map.put("ownerId", ownerId.toString());
-        map.put("ownerName", ownerName);
-        map.put("world", location.getWorld().getName());
-        map.put("x", location.getX());
-        map.put("y", location.getY());
-        map.put("z", location.getZ());
-        map.put("yaw", location.getYaw());
-        map.put("pitch", location.getPitch());
-        map.put("creationTime", creationTime);
-        map.put("playerState", playerState.serialize());
-        map.put("enabled", enabled);
-        return map;
+    public void serialize(ConfigurationSection section) {
+        section.set("checkpointId", checkpointId.toString());
+        section.set("ownerId", ownerId.toString());
+        section.set("ownerName", ownerName);
+        section.set("world", location.getWorld().getName());
+        section.set("x", location.getX());
+        section.set("y", location.getY());
+        section.set("z", location.getZ());
+        section.set("yaw", (double) location.getYaw());
+        section.set("pitch", (double) location.getPitch());
+        section.set("creationTime", creationTime);
+        section.set("enabled", enabled);
+
+        playerState.serialize(section.createSection("playerState"));
     }
 
     /**
-     * Creates a Checkpoint from a serialized Map.
+     * Deserializes a checkpoint from a ConfigurationSection.
      *
-     * @param map the serialized data
+     * @param section the section to read from
      * @return the deserialized Checkpoint, or null if the world doesn't exist
      */
-    @SuppressWarnings("unchecked")
-    public static Checkpoint deserialize(Map<String, Object> map) {
-        UUID checkpointId = UUID.fromString((String) map.get("checkpointId"));
-        UUID ownerId = UUID.fromString((String) map.get("ownerId"));
-        String ownerName = (String) map.get("ownerName");
+    public static Checkpoint deserialize(ConfigurationSection section) {
+        UUID checkpointId = UUID.fromString(section.getString("checkpointId"));
+        UUID ownerId = UUID.fromString(section.getString("ownerId"));
+        String ownerName = section.getString("ownerName");
 
-        String worldName = (String) map.get("world");
+        String worldName = section.getString("world");
         World world = Bukkit.getWorld(worldName);
         if (world == null) {
-            return null; // World doesn't exist anymore
+            return null;
         }
 
-        double x = ((Number) map.get("x")).doubleValue();
-        double y = ((Number) map.get("y")).doubleValue();
-        double z = ((Number) map.get("z")).doubleValue();
-        float yaw = ((Number) map.get("yaw")).floatValue();
-        float pitch = ((Number) map.get("pitch")).floatValue();
+        double x = section.getDouble("x");
+        double y = section.getDouble("y");
+        double z = section.getDouble("z");
+        float yaw = (float) section.getDouble("yaw");
+        float pitch = (float) section.getDouble("pitch");
         Location location = new Location(world, x, y, z, yaw, pitch);
 
-        long creationTime = ((Number) map.get("creationTime")).longValue();
-        PlayerState state = PlayerState.deserialize((Map<String, Object>) map.get("playerState"));
-        boolean enabled = (boolean) map.getOrDefault("enabled", true);
+        long creationTime = section.getLong("creationTime");
+        boolean enabled = section.getBoolean("enabled", true);
+
+        ConfigurationSection stateSection = section.getConfigurationSection("playerState");
+        if (stateSection == null) {
+            return null;
+        }
+        PlayerState state = PlayerState.deserialize(stateSection);
 
         return new Checkpoint(checkpointId, ownerId, ownerName, location,
                 creationTime, state, enabled);
     }
 
-    // Getters and setters
     public UUID getCheckpointId() {
         return checkpointId;
     }

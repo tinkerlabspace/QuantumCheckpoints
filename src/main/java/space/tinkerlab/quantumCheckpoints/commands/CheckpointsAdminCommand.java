@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 
 /**
  * Thin dispatcher for admin checkpoint commands (/checkpoints).
+ * Supports both player and console execution.
  * Delegates all logic to registered {@link SubCommand} handlers.
  */
 public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
@@ -52,42 +53,45 @@ public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("This command can only be used by players.");
-            return true;
-        }
-
         if (args.length == 0) {
-            sendHelp(player);
+            sendHelp(sender);
             return true;
         }
 
         SubCommand subCommand = registry.get(args[0]);
-        if (subCommand != null) {
-            String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
+        if (subCommand == null) {
+            sendHelp(sender);
+            return true;
+        }
+
+        String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
+
+        if (sender instanceof Player player) {
             subCommand.execute(player, subArgs);
+        } else if (subCommand.supportsConsole()) {
+            subCommand.execute(sender, subArgs);
         } else {
-            sendHelp(player);
+            sender.sendMessage("This sub-command can only be used by players.");
         }
 
         return true;
     }
 
-    private void sendHelp(Player player) {
-        MessageUtil.info(player, "§6QuantumCheckpoints Admin Commands:");
-        MessageUtil.info(player, " §e/checkpoints cost <item> <amount> §7- Set cost");
-        MessageUtil.info(player, " §e/checkpoints limit <number> §7- Set limit");
-        MessageUtil.info(player, " §e/checkpoints disable [true/false] §7- Disable");
-        MessageUtil.info(player, " §e/checkpoints enable [true/false] §7- Enable");
-        MessageUtil.info(player, " §e/checkpoints clear §7- Clear all");
-        MessageUtil.info(player, " §e/checkpoints penalty <true/false> §7- Toggle penalty");
-        MessageUtil.info(player, " §e/checkpoints status §7- View settings");
+    private void sendHelp(CommandSender sender) {
+        MessageUtil.info(sender, "§6QuantumCheckpoints Admin Commands:");
+        MessageUtil.info(sender, " §e/checkpoints cost <item> <amount> §7- Set cost");
+        MessageUtil.info(sender, " §e/checkpoints limit <number> §7- Set limit");
+        MessageUtil.info(sender, " §e/checkpoints disable [true/false] §7- Disable");
+        MessageUtil.info(sender, " §e/checkpoints enable [true/false] §7- Enable");
+        MessageUtil.info(sender, " §e/checkpoints clear §7- Clear all");
+        MessageUtil.info(sender, " §e/checkpoints penalty <true/false> §7- Toggle penalty");
+        MessageUtil.info(sender, " §e/checkpoints status §7- View settings");
     }
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String alias, @NotNull String[] args) {
-        if (!sender.hasPermission("quantumcheckpoints.admin") || !(sender instanceof Player player)) {
+        if (!sender.hasPermission("quantumcheckpoints.admin")) {
             return List.of();
         }
 
@@ -95,10 +99,12 @@ public class CheckpointsAdminCommand implements CommandExecutor, TabCompleter {
             return filterCompletions(registry.getCommandNames(), args[0]);
         }
 
-        SubCommand subCommand = registry.get(args[0]);
-        if (subCommand != null) {
-            String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
-            return subCommand.tabComplete(player, subArgs);
+        if (sender instanceof Player player) {
+            SubCommand subCommand = registry.get(args[0]);
+            if (subCommand != null) {
+                String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
+                return subCommand.tabComplete(player, subArgs);
+            }
         }
 
         return List.of();

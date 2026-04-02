@@ -4,6 +4,7 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
+import space.tinkerlab.quantumCheckpoints.checkpoint.Checkpoint;
 import space.tinkerlab.quantumCheckpoints.checkpoint.CheckpointManager;
 import space.tinkerlab.quantumCheckpoints.commands.SubCommand;
 import space.tinkerlab.quantumCheckpoints.util.CoordinateUtil;
@@ -55,19 +56,22 @@ public class CreateAtCoordsCommand implements SubCommand {
             if (result.isSuccess()) {
                 reportSuccess(player, (int) x, (int) z);
             } else if (result.isProximityConflict()) {
+                Checkpoint conflicting = result.getCheckpoint();
+                int ix = (int) x;
+                int iz = (int) z;
                 plugin.getConfirmationManager().requestOverrideConfirmation(
                         player,
                         () -> {
                             CheckpointManager.CheckpointResult forced =
                                     plugin.getCheckpointManager().forceCreateCheckpoint(
-                                            player, location, result.getCheckpoint());
+                                            player, location, conflicting);
                             if (forced.isSuccess()) {
-                                reportSuccess(player, (int) x, (int) z);
+                                reportSuccess(player, ix, iz);
                             } else {
                                 MessageUtil.error(player, forced.getMessage());
                             }
                         },
-                        result.getCheckpoint().getOwnerName()
+                        conflicting.getOwnerName()
                 );
             } else {
                 MessageUtil.error(player, result.getMessage());

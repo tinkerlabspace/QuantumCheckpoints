@@ -4,6 +4,7 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import space.tinkerlab.quantumCheckpoints.QuantumCheckpoints;
+import space.tinkerlab.quantumCheckpoints.checkpoint.Checkpoint;
 import space.tinkerlab.quantumCheckpoints.checkpoint.CheckpointManager;
 import space.tinkerlab.quantumCheckpoints.commands.SubCommand;
 import space.tinkerlab.quantumCheckpoints.util.MessageUtil;
@@ -34,20 +35,21 @@ public class CreateHereCommand implements SubCommand {
         if (result.isSuccess()) {
             reportSuccess(player);
         } else if (result.isProximityConflict()) {
-            // Another player's checkpoint is nearby — ask for override confirmation
+            Checkpoint conflicting = result.getCheckpoint();
             plugin.getConfirmationManager().requestOverrideConfirmation(
                     player,
                     () -> {
+                        // Re-capture location at confirmation time in case player moved
                         CheckpointManager.CheckpointResult forced =
                                 plugin.getCheckpointManager().forceCreateCheckpoint(
-                                        player, location, result.getCheckpoint());
+                                        player, location, conflicting);
                         if (forced.isSuccess()) {
                             reportSuccess(player);
                         } else {
                             MessageUtil.error(player, forced.getMessage());
                         }
                     },
-                    result.getCheckpoint().getOwnerName()
+                    conflicting.getOwnerName()
             );
         } else {
             MessageUtil.error(player, result.getMessage());
