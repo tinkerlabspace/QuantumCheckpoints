@@ -1,4 +1,3 @@
-// src/main/java/space/tinkerlab/quantumCheckpoints/commands/ConfirmationManager.java
 package space.tinkerlab.quantumCheckpoints.commands;
 
 import org.bukkit.entity.Player;
@@ -12,14 +11,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages pending command confirmations for destructive operations.
+ * Supports different confirmation types for different scenarios.
  */
 public class ConfirmationManager {
 
     private static final long CONFIRMATION_TIMEOUT_SECONDS = 30;
 
     private final QuantumCheckpoints plugin;
-
-    /** Maps player UUIDs to their pending confirmations */
     private final Map<UUID, PendingConfirmation> pendingConfirmations;
 
     /**
@@ -33,46 +31,46 @@ public class ConfirmationManager {
     }
 
     /**
-     * Requests confirmation from a player for a destructive action.
-     * Shows appropriate confirmation command based on player permissions.
+     * Requests a standard destructive-action confirmation.
      *
-     * @param player      the player to request confirmation from
-     * @param action      the action to confirm
-     * @param description a description of what will happen
+     * @param player      the player to prompt
+     * @param action      the action to run on confirmation
+     * @param description brief description of what will happen
      */
     public void requestConfirmation(Player player, Runnable action, String description) {
         UUID playerId = player.getUniqueId();
-
-        // Cancel any existing pending confirmation
         cancelPendingConfirmation(playerId);
 
         PendingConfirmation confirmation = new PendingConfirmation(action, description);
         pendingConfirmations.put(playerId, confirmation);
 
-        MessageUtil.warn(player, "⚠ " + description);
+        MessageUtil.warn(player, description);
+        MessageUtil.info(player, "§e/cp confirm §7to proceed, §e/cp cancel §7to abort. §8(" +
+                CONFIRMATION_TIMEOUT_SECONDS + "s)");
 
-        // Only show commands the player can actually use
-        if (player.hasPermission("quantumcheckpoints.admin")) {
-            MessageUtil.info(player, "Type §e/checkpoint confirm§7 or §e/checkpoints confirm§7 within " +
-                    CONFIRMATION_TIMEOUT_SECONDS + " seconds to confirm.");
-            MessageUtil.info(player, "Type §e/checkpoint cancel§7 or §e/checkpoints cancel§7 to cancel.");
-        } else {
-            MessageUtil.info(player, "Type §e/checkpoint confirm§7 within " +
-                    CONFIRMATION_TIMEOUT_SECONDS + " seconds to confirm.");
-            MessageUtil.info(player, "Type §e/checkpoint cancel§7 to cancel.");
-        }
+        scheduleTimeout(playerId, confirmation);
+    }
 
-        // Schedule timeout
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (pendingConfirmations.remove(playerId, confirmation)) {
-                    if (player.isOnline()) {
-                        MessageUtil.error(player, "Confirmation timed out.");
-                    }
-                }
-            }
-        }.runTaskLater(plugin, CONFIRMATION_TIMEOUT_SECONDS * 20L);
+    /**
+     * Requests confirmation specifically for overriding a nearby checkpoint.
+     *
+     * @param player       the player to prompt
+     * @param action       the action to run on confirmation
+     * @param ownerName    the name of the nearby checkpoint's owner
+     */
+    public void requestOverrideConfirmation(Player player, Runnable action, String ownerName) {
+        UUID playerId = player.getUniqueId();
+        cancelPendingConfirmation(playerId);
+
+        String description = "A checkpoint by §e" + ownerName + " §eis nearby and will be replaced.";
+        PendingConfirmation confirmation = new PendingConfirmation(action, description);
+        pendingConfirmations.put(playerId, confirmation);
+
+        MessageUtil.warn(player, description);
+        MessageUtil.info(player, "§e/cp confirm §7to replace it, §e/cp cancel §7to abort. §8(" +
+                CONFIRMATION_TIMEOUT_SECONDS + "s)");
+
+        scheduleTimeout(playerId, confirmation);
     }
 
     /**
@@ -101,16 +99,6 @@ public class ConfirmationManager {
     }
 
     /**
-     * Cancels a pending confirmation by player UUID.
-     *
-     * @param playerId the player's UUID
-     * @return true if there was a pending confirmation to cancel
-     */
-    private boolean cancelPendingConfirmation(UUID playerId) {
-        return pendingConfirmations.remove(playerId) != null;
-    }
-
-    /**
      * Checks if a player has a pending confirmation.
      *
      * @param player the player to check
@@ -120,8 +108,26 @@ public class ConfirmationManager {
         return pendingConfirmations.containsKey(player.getUniqueId());
     }
 
+    private boolean cancelPendingConfirmation(UUID playerId) {
+        return pendingConfirmations.remove(playerId) != null;
+    }
+
     /**
-     * Record to hold a pending confirmation action.
+     * Schedules automatic timeout for a pending confirmation.
      */
+    private void scheduleTimeout(UUID playerId, PendingConfirmation confirmation) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (pendingConfirmations.remove(playerId, confirmation)) {
+                    Player player = plugin.getServer().getPlayer(playerId);
+                    if (player != null && player.isOnline()) {
+                        MessageUtil.error(player, "Confirmation expired.");
+                    }
+                }
+            }
+        }.runTaskLater(plugin, CONFIRMATION_TIMEOUT_SECONDS * 20L);
+    }
+
     private record PendingConfirmation(Runnable action, String description) {}
 }
